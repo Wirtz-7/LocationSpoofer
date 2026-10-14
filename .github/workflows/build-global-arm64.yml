@@ -1,0 +1,42 @@
+name: Build Global arm64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Accept SDK licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+
+      # release 变体的 signingConfig 需要密钥，否则 AGP 报 "Keystore file not set"
+      - name: Generate temporary signing key
+        run: |
+          keytool -genkeypair \
+            -keystore "${{ runner.temp }}/release.jks" \
+            -alias lospoofer \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass lospoofer -keypass lospoofer \
+            -dname "CN=LocationSpoofer,O=Personal,C=CN"
+
+      - name: Build global release
+        env:
+          KEYSTORE_FILE_PATH: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: lospoofer
+          KEY_ALIAS: lospoofer
+          KEY_PASSWORD: lospoofer
+        run: ./gradlew --no-daemon :app:assembleGlobalRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocationSpoofer-global-arm64
+          path: app/build/outputs/apk/global/release/*.apk
+          if-no-files-found: error
