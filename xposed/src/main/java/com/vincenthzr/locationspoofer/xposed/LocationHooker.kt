@@ -339,8 +339,14 @@ class LocationHooker : XposedModule() {
         // 反检测: 必须在其他Hook之前安装,隐藏Xposed环境
         hookAntiDetection(classLoader)
 
-        hookLocationAPIs(classLoader, pkg)
-        hookGnssStatus(classLoader)
+        // global 方案的定位与 GNSS 由 system_server 的 hookSystemLocationService 统一接管
+        // （拦 LocationManagerService，经 Binder 对所有 App 生效）。App 进程内再 hook 一次，
+        // 同一个 Location 会被两层各自改写，实测表现为「勾了作用域反而定位失效」。
+        // 这里只跳过定位/GNSS，保留下面的环境与传感器 Hook。
+        if (!BuildConfig.GLOBAL_SCHEME) {
+            hookLocationAPIs(classLoader, pkg)
+            hookGnssStatus(classLoader)
+        }
 
         // 兼容 MultiDex 与二次动态 DexClassLoader (例如百度地图 classes16.dex)
         try {
@@ -389,6 +395,8 @@ class LocationHooker : XposedModule() {
     }
 
     internal fun hookAllMapSdks(cl: ClassLoader) {
+        // global 方案的定位已由 system_server 统一接管，SDK 层无需再拦一次
+        if (BuildConfig.GLOBAL_SCHEME) return
         try { hookAMapSDK(cl) } catch (_: Throwable) {}
         try { hookTencentSDK(cl) } catch (_: Throwable) {}
         try { hookBaiduSDK(cl) } catch (_: Throwable) {}

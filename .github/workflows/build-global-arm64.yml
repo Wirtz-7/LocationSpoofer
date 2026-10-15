@@ -1,4 +1,4 @@
-name: Build arm64 (global + scoped)
+name: Build global arm64
 
 on:
   workflow_dispatch:
@@ -17,15 +17,12 @@ jobs:
       - name: Accept SDK licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
 
-      # release 变体的 signingConfig 需要密钥，否则 AGP 报 "Keystore file not set"
-      - name: Generate temporary signing key
-        run: |
-          keytool -genkeypair \
-            -keystore "${{ runner.temp }}/release.jks" \
-            -alias lospoofer \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass lospoofer -keypass lospoofer \
-            -dname "CN=LocationSpoofer,O=Personal,C=CN"
+      # 固定签名密钥（仓库 Secret KEYSTORE_BASE64），保证每次构建的 APK 签名一致，
+      # 之后可以直接覆盖安装，不必先卸载
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: Build global release
         env:
@@ -39,18 +36,4 @@ jobs:
         with:
           name: LocationSpoofer-global-arm64
           path: app/build/outputs/apk/global/release/*.apk
-          if-no-files-found: error
-
-      - name: Build scoped release
-        env:
-          KEYSTORE_FILE_PATH: ${{ runner.temp }}/release.jks
-          KEYSTORE_PASSWORD: lospoofer
-          KEY_ALIAS: lospoofer
-          KEY_PASSWORD: lospoofer
-        run: ./gradlew --no-daemon :app:assembleScopedRelease
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: LocationSpoofer-scoped-arm64
-          path: app/build/outputs/apk/scoped/release/*.apk
           if-no-files-found: error
